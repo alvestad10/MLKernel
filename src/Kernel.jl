@@ -354,6 +354,77 @@ function sqrtK(u,p,::AHO_ConstKernel_expA)
     return [real(_H);imag(_H)]    
 end
 
+"""
+Constant kernel with the entries of the real matrix P such that the kernel becomes
+```math
+H = e^{A}
+```
+We get ``K`` by the built in squaring ``H^2``.
+"""
+mutable struct AHO_ConstKernel_HexpA <: AHOConstantKernelParameters
+    p::Matrix{Float64}
+    sqrtK::Matrix{Float64}
+    K::Matrix{Float64}
+end
+
+function AHO_ConstKernel_HexpA(p)
+    
+    _H = exp(p[1:div(end,2),:] + im*p[div(end,2)+1:end,:])
+    H = [real(_H);imag(_H)]
+    
+    _K=_H^2
+    #_K = exp(p[1:div(end,2),:] + im*p[div(end,2)+1:end,:])
+    KRe = real(_K)
+    KIm = imag(_K)
+    K = hcat([KRe;KIm],[-KIm;KRe])
+
+    #_H = sqrt(_K)
+    #H = [real(_H);imag(_H)]
+    
+    return AHO_ConstKernel_HexpA(p,H,K)
+end
+
+function AHO_ConstKernel_HexpA(M::AHO)
+    @unpack t_steps = M.contour 
+    
+    p = zeros(2t_steps,t_steps)
+
+    return AHO_ConstKernel_HexpA(p)
+end
+
+
+function updateKernel!(pK::AHO_ConstKernel_HexpA)
+
+    _H = exp(pK.p[1:div(end,2),:] + im*pK.p[div(end,2)+1:end,:])
+    pK.sqrtK = [real(_H);imag(_H)]
+    
+    _K=_H^2
+    #_K = exp(pK.p[1:div(end,2),:] + im*pK.p[div(end,2)+1:end,:])
+    KRe = real(_K)
+    KIm = imag(_K)
+    pK.K = hcat([KRe;KIm],[-KIm;KRe])
+
+    #_H = sqrt(_K)
+    #pK.sqrtK = [real(_H);imag(_H)]
+end
+
+function K(u,p,::AHO_ConstKernel_HexpA)
+    #_K = exp(p[1:div(end,2),:] + im*p[div(end,2)+1:end,:])
+    _H = exp(p[1:div(end,2),:] + im*p[div(end,2)+1:end,:])
+    
+    _K=_H^2
+    return real(_K),imag(_K)
+end
+
+function sqrtK(u,p,::AHO_ConstKernel_HexpA)
+    _H = exp(p[1:div(end,2),:] + im*p[div(end,2)+1:end,:])
+    
+
+    #_K = exp(p[1:div(end,2),:] + im*p[div(end,2)+1:end,:])
+    #_H = sqrt(_K)
+    return [real(_H);imag(_H)]    
+end
+
 
 """
 Constant kernel with the entries of the real matrix P such that the kernel becomes
@@ -821,7 +892,9 @@ function ConstantKernel(M::AHO; kernelType=:expiP)
     elseif kernelType == :expiP
         pK = AHO_ConstKernel_expiP(M)
     elseif kernelType == :expA
-        pK = AHO_ConstKernel_expA(M)   
+        pK = AHO_ConstKernel_expA(M) 
+    elseif kernelType == :HexpA
+        pK = AHO_ConstKernel_HexpA(M)   
     elseif kernelType == :expiHerm
         pK = AHO_ConstKernel_expiHerm(M)   
     elseif kernelType == :expiSym

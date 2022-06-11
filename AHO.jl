@@ -9,7 +9,7 @@ using LaTeXStrings
 Ys = collect(0:0.05:3)
 Xs = collect(0:0.05:5)
 
-M=AHO(1.,24.,2.0,1.0,10;Δβ=0.5)#,κ=1e-3*im)
+M=AHO(1.,24.,1.5,1.0,8)#;Δβ=0.5)#,κ=1e-3*im)
 scatter(M.contour.x0)
 
 KP = ConstantKernelProblem(M)
