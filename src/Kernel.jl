@@ -898,7 +898,7 @@ function ConstantKernel(M::AHO; kernelType=:expiP)
     elseif kernelType == :expiHerm
         pK = AHO_ConstKernel_expiHerm(M)   
     elseif kernelType == :expiSym
-        pK = AHO_ConstKernel_expiHerm(M)   
+        pK = AHO_ConstKernel_expiSym(M)   
     elseif kernelType == :inM_expiP
         pK = AHO_ConstKernel_invM_expiP(M)  
     end
