@@ -345,6 +345,40 @@ function calcDrift(sol,KP::KernelProblem{LM_AHO};p=getKernelParams(KP.kernel))
 
 end
 
+function calcLFP(KP::KernelProblem{LM_AHO};p=getKernelParams(KP.kernel))
+
+    σ = KP.model.σ
+    λ = KP.model.λ
+    _σ = σ[1] + im*σ[2]
+    Hfp(u) = begin
+        return -(_σ^2 / 4)*u^2 + (3*(λ/6)/2)*u^2 - (_σ*(λ/6)/2)u^4 - ((λ/6)^2/4)*u^6 + (_σ/2) 
+    end
+
+    n = 30000
+    xmin = -15; xmax = 15
+    x = collect(range(xmin,xmax;length=n))
+    dx = x[2]-x[1]
+    dS = BandedMatrix{ComplexF64}(undef,(n,n), (0,0))
+    D2x = BandedMatrix{Float64}(undef,(n,n), (1,1))
+    
+    Hfp = Hfp.(x)
+    dS[band(0)] .= Hfp; 
+    D2x[band(0)] .= -2. /(dx)^2; 
+    D2x[band(1)] .= 1. /(dx)^2 ; 
+    D2x[band(-1)] .= 1. /(dx)^2;
+    D2x[band(n)] .= 1. /(dx)^2; 
+    D2x[band(-n)] .= 1. /(dx)^2;
+
+
+
+    KRe, KIm = KP.kernel.K([],p)
+    A = - (KRe + im*KIm) .* (D2x + dS)
+
+    vals,_ = KrylovKit.eigsolve(A,1,:SR)
+    return sum(abs,val for val in real(vals) if val < 0)
+
+end
+
 function calcBTLoss(sol,KP::KernelProblem{LM_AHO},Ys;p=getKernelParams(KP.kernel))
     BT = getBoundaryTerms(KP;Ys=Ys)
     B1, B2 = calcBoundaryTerms(sol,BT)
@@ -501,6 +535,8 @@ function Loss(L,KP::KernelProblem{LM_AHO},NTr;Ys=[])
         elseif L ∈ [:Sym, :Sep]
             return calcSymLoss(sol,KP) + 
                    calcDriftOpt(sol,KP)
+        elseif L ∈ [:FP]
+            return calcDriftOpt(sol,KP)
         end
                
     end

@@ -143,6 +143,16 @@ function d_driftOpt(LK::LearnKernel;sol=nothing,ID = :driftOpt)
     
 end
 
+function d_FP(LK::LearnKernel)
+    
+    @unpack KP = LK
+    #return Zygote.gradient((p) -> calcLFP(KP;p=p),MLKernel.getKernelParams(KP.kernel))[1]
+    #return ForwardDiff.gradient((p) -> calcLFP(KP;p=p),MLKernel.getKernelParams(KP.kernel))
+    d = FiniteDifferences.grad(central_fdm(3, 1), (p) -> calcLFP(KP;p=p), MLKernel.getKernelParams(KP.kernel))
+    #@show d
+    return d[1]
+end
+
 
 function dBTOpt(LK::LearnKernel; sol=nothing)
 
@@ -207,6 +217,9 @@ function learnKernel(LK::LearnKernel; cb=(LK::LearnKernel; sol=nothing, addtohis
                     dKs = dL(LK; sol=sol)[1]
                 elseif LK.Loss.ID ∈ [:driftOpt,:BTOpt,:LSymOpt]
                     dKs = d_driftOpt(LK;sol=sol,ID=LK.Loss.ID)
+                elseif LK.Loss.ID ∈ [:FP]
+                    dKs = d_FP(LK)
+                    #@show dKs
                 end
 
                 #=tdL = @elapsed begin
