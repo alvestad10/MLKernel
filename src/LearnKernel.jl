@@ -114,7 +114,7 @@ function dL(LK::LearnKernel;sol=nothing)
     return 2*mean(res),std(2. * res)/sqrt(NTr)
 end
 
-function d_driftOpt(LK::LearnKernel;sol=nothing,ID = :driftOpt)
+function d_driftOpt(LK::LearnKernel;sol=nothing,ID = :driftOpt,p = getKernelParams(LK.KP.kernel))
     
     @unpack KP, Loss, tspan, NTr,saveat,alpha = LK
     
@@ -131,12 +131,12 @@ function d_driftOpt(LK::LearnKernel;sol=nothing,ID = :driftOpt)
         gLSYmOpt(_p,i) = MLKernel.calcLSymDrift(reduce(hcat,sol[i].u),KP;p=_p) #+ 
     end
 
-    if length(MLKernel.getKernelParams(KP.kernel)) > 100
-        return ThreadsX.sum((i) -> Zygote.gradient((p) -> g(p,i),MLKernel.getKernelParams(KP.kernel))[1],1:length(sol)) ./ length(sol) #.+
-           #Zygote.gradient((_p) -> KSym(LK.KP;p=_p),MLKernel.getKernelParams(KP.kernel))[1]
+    if length(MLKernel.getKernelParams(KP.kernel)) > 10
+        return ThreadsX.sum((i) -> Zygote.gradient((p) -> g(p,i),p)[1],1:length(sol)) ./ length(sol) #.+
+           #Zygote.gradient((_p) -> abs(det(KP.kernel.K([],p)[1] + im*KP.kernel.K([],p)[2])-1.),p)[1]
     else
         #return ThreadsX.sum((i) -> ForwardDiff.gradient((p) -> g(p,i),MLKernel.getKernelParams(KP.kernel)),1:length(sol)) ./ length(sol)
-        return ForwardDiff.gradient((p) -> MLKernel.calcDriftOpt(sol,KP;p=p),MLKernel.getKernelParams(KP.kernel))
+        return ForwardDiff.gradient((p) -> MLKernel.calcDriftOpt(sol,KP;p=p),p)
     end
     #Zygote.gradient((p) -> 20*abs(det(p[1:div(end,2),:] + im*p[div(end,2)+1:end,:]) - 1)^2,MLKernel.getKernelParams(KP.kernel))
     
@@ -199,6 +199,176 @@ function learnKernel(LK::LearnKernel; cb=(LK::LearnKernel; sol=nothing, addtohis
     # initialize the derivative observable
     dKs = similar(getKernelParams(LK.KP.kernel))
     
+    
+    for i in 1:epochs
+        
+        unstable = false
+
+        println("EPOCH ", i, "/", epochs)#+start_inx)
+        
+        prev = 10.
+
+        for j in 1:runs_pr_epoch
+            
+            gotDerivative = false
+            tdL = 0.
+            while !gotDerivative
+                
+
+                tdL = @elapsed if LK.Loss.ID ∈ [:True]
+                    dKs = dL(LK; sol=sol)[1]
+                elseif LK.Loss.ID ∈ [:driftOpt,:BTOpt,:LSymOpt]
+                    dKs = d_driftOpt(LK;sol=sol,ID=LK.Loss.ID)
+                elseif LK.Loss.ID ∈ [:FP]
+                    dKs = d_FP(LK)
+                    #@show dKs
+                end
+
+                #=tdL = @elapsed begin
+                    if LK.Loss.ID ∈ [:Sep,:driftOpt,:driftRWOpt]
+                        dKs = 0
+                    else
+                        dKs = dL(LK; sol=sol)[1]
+                    end
+                end
+                
+                if LK.Loss.ID ∈ [:Sep,:driftOpt,:driftRWOpt]
+                    tdL2 = @elapsed begin
+                        dImDrift = d_imDrift(LK;sol=sol) #+ dBTOpt(LK;sol=sol)
+                        #dImDrift = dBTOpt(LK;sol=sol)
+                        #id = calcImDrift(sol,KP)
+                    end
+                    #dKs = ( dKs .+ (dImDrift/100) )/ 2
+                    dKs = ( dKs .+ dImDrift )
+                    println("Time ", j, ": ", trun, ", ", tdL, ", ", tdL2)
+                else
+                    println("Time ", j, ": ", trun, ", ", tdL)
+                end=#
+
+
+                
+
+                if !any(isnan.(dKs))
+                    #@show any(isnan.(dKs))
+                    gotDerivative = true
+                else
+                    tspan += 1
+                    println("Detecting NaN in dKs; increasing tspan=", tspan, " and trying again")
+                end
+            end
+
+
+            # Updating the kernel parameters
+            Flux.update!(opt, getKernelParams(LK.KP.kernel), dKs)
+
+            if KP.kernel isa ConstantKernel
+                LK.KP = updateProblem(KP)
+            end
+            
+            LT = LK.Loss.LTrain(sol,KP)
+            println("Time ", j, ": ", trun, ", ", tdL,", LTrain: ", LT)
+            
+            if abs(LT-prev)/abs(LT) < 1e-3
+                break
+            end
+            prev = LT
+
+            
+
+            #if runs_pr_epoch == 1
+            #    cb(LK;sol = sol, addtohistory = (runs_pr_epoch == 1))
+            #end
+        end
+
+        trun = @elapsed sol = run_sim(LK.KP;tspan=tspan,NTr=NTr,saveat=saveat)
+        if check_warnings!(sol)
+            @warn "All trajectories diverged"
+            unstable = true
+        end
+
+        if unstable
+            break
+        end
+
+        if runs_pr_epoch > 1
+            cb(LK; sol=sol, addtohistory=true)
+        end
+    end
+
+
+end
+
+
+#=function learnKernel2(LK::LearnKernel; cb=(LK::LearnKernel; sol=nothing, addtohistory=false) -> ())
+
+    @unpack KP, opt, epochs, tspan, NTr, saveat, runs_pr_epoch = LK
+    
+    # Use to see if more configurations is needed for the testset
+    test_eq_train = (tspan == LK.tspan_test && NTr == LK.NTr_test)
+
+    ### Text to the user
+    StartingLKText(LK)
+
+    if KP.kernel isa ConstantKernel
+        LK.KP = updateProblem(KP)
+    end
+
+    ###### Getting initial configurations
+    trun = @elapsed sol = run_sim(LK.KP;tspan=tspan,NTr=NTr,saveat=saveat)
+    if check_warnings!(sol)
+        @warn "All trajectories diverged"
+        return 0
+    end
+    cb(LK;sol = (test_eq_train ? sol : nothing),addtohistory=true)
+    
+    # initialize the derivative observable
+    dKs = similar(getKernelParams(LK.KP.kernel))
+
+
+    f(p,P) = begin
+        setKernel!(KP.kernel,p)
+        updateProblem(KP)
+        return calcDriftOpt(sol,KP) #+ abs(det(KP.kernel.pK.K)-1.)
+    end
+    grad(dK,p,P) = begin
+        dK .= d_driftOpt(LK;sol=sol,ID=LK.Loss.ID,p=p)
+    end
+
+    #cons= (x,p) -> [abs(det(KP.kernel.pK.K)-1.)]
+
+    callback = function (p,l) #callback function to observe training
+        
+        
+        setKernel!(KP.kernel,p)
+        updateProblem(KP)
+
+        sol .= run_sim(LK.KP;tspan=tspan,NTr=NTr,saveat=saveat)
+        
+        #@show calcDriftOpt(sol,KP)
+        #@show calcTrueLoss(sol,KP)
+        @show l
+        cb(LK;sol = (test_eq_train ? sol : nothing),addtohistory=true)
+        
+        return false
+    end
+
+    of = OptimizationFunction(f; grad=grad)#, cons=cons)
+    prob = OptimizationProblem(of, getKernelParams(LK.KP.kernel); lb = -2*ones(size(dKs)), ub = 2*ones(size(dKs)))
+    sol = solve(prob,
+                #BBO_generating_set_search();
+                #BBO_separable_nes();
+                #BBO_adaptive_de_rand_1_bin();
+                #Optimization.Evolutionary.CMAES(μ =40 , λ = 100); 
+                LBFGS();
+                #BFGS();
+                #NelderMead();
+                #Ipopt.Optimizer();
+                #ADAM(0.01);
+                callback = callback, maxiters=100)
+    @show sol
+
+    #=
+
     
     for i in 1:epochs
         
@@ -282,7 +452,9 @@ function learnKernel(LK::LearnKernel; cb=(LK::LearnKernel; sol=nothing, addtohis
         if runs_pr_epoch > 1
             cb(LK; addtohistory=true)
         end
-    end
+    end=#
 
 
-end
+end=#
+
+
