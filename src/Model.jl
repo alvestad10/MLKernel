@@ -60,9 +60,9 @@ struct SKContour
     κ::ComplexF64 # Regulator
 
 
-    function SKContour(RT::Float64,β::Float64,steps_pr_length::Integer; Δβ = 0., ΔE = 0., κ = 0. * im)
+    function SKContour(RT::Float64,β::Float64,steps_pr_length::Integer; Δβ = 0., ΔE = -1., κ = 0. * im)
         
-        if Δβ == 0. && ΔE == 0.
+        if Δβ == 0. && ΔE == -1.
 
             RT_points = floor(Integer,steps_pr_length*RT) + 1
             β_points = floor(Integer,steps_pr_length*β) + 1
@@ -80,7 +80,7 @@ struct SKContour
 
             new(a,x0,tp,RT,β,t_steps,RT_points,RT_points,β_points,-1.,Δβ,κ)
         
-        elseif Δβ > 0. && ΔE == 0.
+        elseif Δβ > 0. && ΔE == -1.
             
             Δβ != 0.5 && @warn "To use the split of the FW and BW only the 0.5 split is suported at the moment"
 
@@ -102,7 +102,7 @@ struct SKContour
 
             new(a,x0,tp,RT,β,t_steps,RT_points,RT_points,0,-1.,Δβ,κ)
             
-        elseif Δβ == 0. && ΔE > 0.
+        elseif Δβ == 0. && ΔE >= 0.
 
             FW_points = floor(Integer,steps_pr_length*sqrt(RT^2 + ΔE^2)) + 1
             BW_points = floor(Integer,steps_pr_length*sqrt((β-ΔE)^2 + RT^2)) + 1

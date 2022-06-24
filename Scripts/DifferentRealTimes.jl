@@ -3,7 +3,7 @@ using JLD2
 using Parameters
 using Plots, LaTeXStrings
 
-const RUN = "AlexandruSK_2550_expA_10_15_20_30"
+const RUN = "SK_20pt_40_expA_10_15_20_25_30_35_40"
 const RESULT_DIR = joinpath("Results/DifferentRealTimes",RUN)
 const RESULTPLOT_DIR = joinpath(RESULT_DIR,"ResultPlots")
 if !isdir(RESULT_DIR)
@@ -20,11 +20,11 @@ end
     plotDir::String 
     kf::Symbol                    = :expA
     lossID::Symbol                = :driftOpt
-    opt                           = [MLKernel.ADAM(0.01),MLKernel.ADAM(0.005)]
-    iterations::Vector{Integer}   = [25,50]
-    tspan                         = 30.
-    NTr                           = 20
-    saveat                        = 0.01
+    opt                           = [MLKernel.ADAM(0.001)]
+    iterations::Vector{Integer}   = [40]
+    tspan                         = 20.
+    NTr                           = 40
+    saveat                        = 0.1
 end 
 
 function get_setupDRT(rt,dir)
@@ -32,7 +32,7 @@ function get_setupDRT(rt,dir)
     KDir = joinpath(dir,string("KP_",ID))
     plotDir = joinpath(dir,string("Plots_",ID))
     
-    M = AHO(1.,24.,rt,1.0,10;Δβ=0.5)
+    M = AHO(1.,24.,rt,1.0,20)
     S = setupDRT(ID=ID,M=M,KDir=KDir,plotDir=plotDir)
     sfunique = settingFileUnique(S,dir)
     return S, sfunique
@@ -159,7 +159,7 @@ function run(DRTs)
             LK = MLKernel.LearnKernel(KP,S.lossID,iter; tspan=tspan,NTr=NTr,
                                 saveat=saveat,
                                 opt=opt,
-                                runs_pr_epoch=1);
+                                runs_pr_epoch=10);
             
             learnKernel(LK; cb=cb)
         end
@@ -226,12 +226,12 @@ function plotBestLSymKernel(DRTs)
         end
 
 
-        if rt==2.0 
-            bestInx[i] = 62
-        end
+        #if rt==2.0 
+        #    bestInx[i] = 62
+        #end
         KP = MLKernel.loadKP(bestInx[i],loadOldID,RESULT_DIR)
 
-        sol = run_sim(KP,tspan=30,NTr=100,saveat=0.01)
+        sol = run_sim(KP,tspan=20,NTr=20,saveat=0.01)
         LdriftOpt = MLKernel.calcDriftOpt(sol,KP)
         TLoss = MLKernel.calcTrueLoss(sol,KP)
         LSym =  MLKernel.calcSymLoss(sol,KP)
@@ -240,7 +240,7 @@ function plotBestLSymKernel(DRTs)
         fig = MLKernel.plotFWSKContour(KP,sol;fig=fig, plotSol= (rt == maximum(DRTs)),colors=(i-1)*2 .+ [1,2])
 
         fig2 = MLKernel.plotSKContour(KP,sol)
-        savefig(fig,joinpath(RESULTPLOT_DIR,string("ObservablePlotBestLSym_",rt,"_",RUN,".pdf")))
+        savefig(fig2,joinpath(RESULTPLOT_DIR,string("ObservablePlotBestLSym_",rt,"_",RUN,".pdf")))
         display(fig2)
 
     end
@@ -259,7 +259,7 @@ function plotBestLSymKernel(DRTs)
     println.(sort(DRTs,rev=true),": i=",bestInx,", BestLSym=",bestLSym)
 end
 
-realTimes = [1.0,1.5,2.0]#,3.0,4.0]
+realTimes = [1.0,1.5,2.0]#,2.5,3.0,3.5,4.0]
 run(realTimes)
 plotResults(realTimes)
 plotBestLSymKernel(realTimes)

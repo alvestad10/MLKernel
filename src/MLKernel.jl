@@ -12,8 +12,8 @@ using ForwardDiff
 using Zygote
 using ThreadTools
 using ThreadsX
-using KrylovKit
 using FiniteDifferences
+using Jackknife
 
 include("Model.jl")
 include("Kernel.jl")

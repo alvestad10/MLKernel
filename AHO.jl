@@ -38,7 +38,8 @@ function get_new_lhistory()
     :LTrue => Float64[], 
     :LSymDrift => Float64[], 
     :detK => ComplexF64[],
-    :KSym => Float64[])
+    :KSym => Float64[],
+    :LSym => Float64[])
 end
 
 cb(LK::LearnKernel;sol=nothing,addtohistory=false) = begin
@@ -46,7 +47,7 @@ cb(LK::LearnKernel;sol=nothing,addtohistory=false) = begin
     
     if isnothing(sol)
         sol = run_sim(KP,tspan=LK.tspan_test,NTr=LK.NTr_test)
-        if check_warnings!(sol)
+        if MLKernel.check_warnings!(sol)
             @warn "All trajectories diverged"
         end
     end
@@ -54,7 +55,7 @@ cb(LK::LearnKernel;sol=nothing,addtohistory=false) = begin
     LTrain = LK.Loss.LTrain(sol,KP)
     TLoss = LK.Loss.LTrue(sol,KP)
     reD,imD =  MLKernel.calcDrift(sol,KP)
-    LSymDrift =  mean(MLKernel.calcLSymDrift(reduce(hcat,sol[i].u),KP) for i in 1:LK.NTr)
+    #LSymDrift =  mean(MLKernel.calcLSymDrift(reduce(hcat,sol[i].u),KP) for i in 1:LK.NTr)
     #imD =  MLKernel.calcImDrift(sol,KP)
     LSym =  MLKernel.calcSymLoss(sol,KP)
 
@@ -71,7 +72,7 @@ cb(LK::LearnKernel;sol=nothing,addtohistory=false) = begin
     #elseif KP.kernel.pK isa MLKernel.LM_AHO_NNKernel
     println("LTrain: ", round(LTrain,digits=5), ", TLoss: ", round(TLoss,digits=5), ", LSym: ", round(LSym,digits=5),
             ", reD:", round(reD,digits=5),", imD:", round(imD,digits=5), 
-            ", LSymDrift: ",round(LSymDrift,digits=5),
+            #", LSymDrift: ",round(LSymDrift,digits=5),
             ", magK: ", round(magH,digits=5),
             ", KSym: ", round(KSym,digits=5))#, ", reDrift: ", reD, ", imDrift: ", imD, ", LSym: ", LSym)
     #end
@@ -82,7 +83,8 @@ cb(LK::LearnKernel;sol=nothing,addtohistory=false) = begin
     if addtohistory
         append!(lhistory[:L],LTrain)
         append!(lhistory[:LTrue],TLoss)
-        append!(lhistory[:LSymDrift],LSymDrift)
+        append!(lhistory[:LSym],LSym)
+        #append!(lhistory[:LSymDrift],LSymDrift)
         append!(lhistory[:detK],magH)
         append!(lhistory[:KSym],KSym)        
     end
@@ -101,17 +103,19 @@ KP = ConstantKernelProblem(M;kernel=MLKernel.ConstantKernel(M,kernelType=:K));
 KP = ConstantKernelProblem(M;kernel=MLKernel.ConstantKernel(M,kernelType=:H));
 KP = ConstantKernelProblem(M;kernel=MLKernel.ConstantKernel(M,kernelType=:expiP));
 KP = ConstantKernelProblem(M;kernel=MLKernel.ConstantKernel(M,kernelType=:expA));
+KP = ConstantKernelProblem(M;kernel=MLKernel.ConstantKernel(M,kernelType=:HexpA));
 KP = ConstantKernelProblem(M;kernel=MLKernel.ConstantKernel(M,kernelType=:invM_expiP));
 KP = ConstantKernelProblem(M;kernel=MLKernel.ConstantKernel(M,kernelType=:expiHerm));
 KP = ConstantKernelProblem(M;kernel=MLKernel.ConstantKernel(M,kernelType=:expiSym));
 KP = ConstantKernelProblem(M;kernel=MLKernel.ConstantKernel_Gaussian(M));
 KP = FieldDependentKernelProblem(M);
-LK = MLKernel.LearnKernel(KP,:driftOpt,10; tspan=20.,NTr=10,
+LK = MLKernel.LearnKernel(KP,:driftOpt,10; tspan=40.,NTr=30,
                             #tspan_test=20.,NTr_test=20,
-                            saveat=0.01,
+                            saveat=0.05,
                           #Ys=[1.0,1.5,2.,3.,4.],
-                          opt=MLKernel.ADAM(0.01),
-                          runs_pr_epoch=1);#, Ys=[1.,1.5,2.,4.,5.])
+                          #opt=MLKernel.Nesterov(),
+                          opt=MLKernel.ADAM(0.001),
+                          runs_pr_epoch=10);#, Ys=[1.,1.5,2.,4.,5.])
 learnKernel(LK; cb=cb)
 
 LK.KP = MLKernel.updateProblem(KP);

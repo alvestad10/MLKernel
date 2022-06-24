@@ -16,6 +16,7 @@ function get_ab(model::AHO,kernel::ConstantKernel{T}) where {T <: AHOConstantKer
 
         xR =  @view u[1:div(end,2)]
         xI =  @view u[div(end,2)+1:end]
+        #x = xR .+ im .* xI
 
         pre_fac = (1 / abs(a[1]))
         
@@ -32,8 +33,36 @@ function get_ab(model::AHO,kernel::ConstantKernel{T}) where {T <: AHOConstantKer
         .- real.(a_m1 .+ a) .* (m.*xR .+ (1/6)*λ .* ((xR.^3) .- 3xR.*(xI.^2))) 
         .+ imag.(a_m1 .+ a) .* (m.*xI .+ (1/6)*λ .* (-xI.^3 .+ 3xI.*(xR.^2))) 
         )
-
         mul!(du,K,_A)
+
+        #A = im*pre_fac*( 
+        #        (x .- x[gp1]) ./ a_m1 + (x .- x[gm1]) ./ a
+        #        .- (a .+ a_m1)/2 .* (m .* x .+ (λ/6) .* x.^3)
+        #)
+
+        #ARe = real(A)
+        #AIm = imag(A)
+
+        #mul!(du,K,[ARe ; AIm])
+
+
+        #=_A[1:t_steps] .= - 0.5 .* (
+        #    2. .* ( real.(a_m1) .* (xI .- xI[gp1])  .- imag.(a_m1 .- κ).*(xR .- xR[gp1]) ) ./ abs.(a_m1).^2
+        #.- 2. .* ( real.(a)  .* (xI[gm1] .- xI) .- imag.(a .- κ)  .* (xR[gm1] .- xR) )./ abs.(a).^2
+        .- real.(a_m1 .+ a) .* ( (1/6)*λ .* (-(xI.^3) .+ 3xI.*(xR.^2))) 
+        .- imag.(a_m1 .+ a) .* ( (1/6)*λ .* (xR.^3 .- 3xR.*(xI.^2))) 
+        )     
+        
+        _A[t_steps+1:end] .= 0.5 .* (
+        #    2. .* (real.(a_m1).*(xR .- xR[gp1]) .+ imag.(a_m1 .- κ).*(xI .- xI[gp1])) ./ abs.(a_m1).^2
+        #.- 2. .* (real.(a).*(xR[gm1] .- xR)   .+ imag.(a .- κ).*(xI[gm1] .- xI)) ./ abs.(a).^2
+        .- real.(a_m1 .+ a) .* ( (1/6)*λ .* ((xR.^3) .- 3xR.*(xI.^2))) 
+        .+ imag.(a_m1 .+ a) .* ( (1/6)*λ .* (-xI.^3 .+ 3xI.*(xR.^2))) 
+        )
+
+
+        du .= pre_fac * ( -u .+ K*_A)=#
+
     end
     
     function b_func!(du,u,p,t)
@@ -130,19 +159,26 @@ end
 function calc_meanObs(::KernelProblem{AHO},obs,NTr)
     avgRe, avgIm, avg2Re, avg2Im, corr0tRe, corr0tIm = obs
     d = 1
-    return mean(avgRe,dims=d)[1,:], (std(avgRe,dims=d)/sqrt(NTr))[1,:], 
-           mean(avgIm,dims=d)[1,:], (std(avgIm,dims=d)/sqrt(NTr))[1,:],
-           mean(avg2Re,dims=d)[1,:], (std(avg2Re,dims=d)/sqrt(NTr))[1,:], 
-           mean(avg2Im,dims=d)[1,:], (std(avg2Im,dims=d)/sqrt(NTr))[1,:],
-           mean(corr0tRe,dims=d)[1,:], (std(corr0tRe,dims=d)/sqrt(NTr))[1,:], 
-           mean(corr0tIm,dims=d)[1,:], (std(corr0tRe,dims=d)/sqrt(NTr))[1,:]
+    #return mean(avgRe,dims=d)[1,:], (std(avgRe,dims=d)/sqrt(NTr))[1,:], 
+    #       mean(avgIm,dims=d)[1,:], (std(avgIm,dims=d)/sqrt(NTr))[1,:],
+    #       mean(avg2Re,dims=d)[1,:], (std(avg2Re,dims=d)/sqrt(NTr))[1,:], 
+    #       mean(avg2Im,dims=d)[1,:], (std(avg2Im,dims=d)/sqrt(NTr))[1,:],
+    #       mean(corr0tRe,dims=d)[1,:], (std(corr0tRe,dims=d)/sqrt(NTr))[1,:], 
+    #       mean(corr0tIm,dims=d)[1,:], (std(corr0tRe,dims=d)/sqrt(NTr))[1,:]
+    
+    return mean(avgRe,dims=d)[1,:], [sqrt(Jackknife.variance(mean,X)) for X in eachrow(avgRe')],#(std(avgRe,dims=d)/sqrt(NTr))[1,:], 
+           mean(avgIm,dims=d)[1,:], [sqrt(Jackknife.variance(mean,X)) for X in eachrow(avgIm')],#(std(avgIm,dims=d)/sqrt(NTr))[1,:],
+           mean(avg2Re,dims=d)[1,:], [sqrt(Jackknife.variance(mean,X)) for X in eachrow(avg2Re')],#(std(avg2Re,dims=d)/sqrt(NTr))[1,:], 
+           mean(avg2Im,dims=d)[1,:], [sqrt(Jackknife.variance(mean,X)) for X in eachrow(avg2Im')],#(std(avg2Im,dims=d)/sqrt(NTr))[1,:],
+           mean(corr0tRe,dims=d)[1,:], [sqrt(Jackknife.variance(mean,X)) for X in eachrow(corr0tRe')],#(std(corr0tRe,dims=d)/sqrt(NTr))[1,:], 
+           mean(corr0tIm,dims=d)[1,:], [sqrt(Jackknife.variance(mean,X)) for X in eachrow(corr0tIm')]#(std(corr0tRe,dims=d)/sqrt(NTr))[1,:]
 end
 
 function calcTrueLoss(sol,KP::KernelProblem{AHO})
         
     obs = calc_obs(KP,sol)
     avgRe, err_avgRe, avgIm, err_avgIm, avg2Re, err_avg2Re, avg2Im, err_avg2Im, corr0tRe, err_corr0tRe, corr0tIm, err_corr0tIm = calc_meanObs(KP,obs,length(sol)) 
-    
+
     return sum(abs2,[real(KP.y["x"]) .- avgRe; 
                      imag(KP.y["x"]) .- avgIm; #err_avgRe; err_avgIm;
                      real(KP.y["x2"]) .- avg2Re; #err_avg2Re;
@@ -180,9 +216,13 @@ function calcDriftOpt(sol,KP::KernelProblem{AHO,T};p=getKernelParams(KP.kernel))
     KRe,KIm = K([],p)
     #_sqrtK = sqrtK([],p)
 
+    #Δt = 1e-2
+
     g(u) = begin
         xR =  @view u[1:div(end,2)]
         xI =  @view u[div(end,2)+1:end]
+
+        x = xR + im*xI
 
         pre_fac = (1 / abs(a[1]))
         
@@ -191,33 +231,81 @@ function calcDriftOpt(sol,KP::KernelProblem{AHO,T};p=getKernelParams(KP.kernel))
         .- 2. .* ( real.(a)  .* (xI[gm1] .- xI) .- imag.(a .- κ)  .* (xR[gm1] .- xR) )./ abs.(a).^2
         .- real.(a_m1 .+ a) .* (m .* xI .+ (1/6)*λ .* (-(xI.^3) .+ 3xI.*(xR.^2))) 
         .- imag.(a_m1 .+ a) .* (m .* xR .+ (1/6)*λ .* (xR.^3 .- 3xR.*(xI.^2))) 
-        )     
-        
+        )  
+
         AIm = pre_fac .* 0.5 .* (
             2. .* (real.(a_m1).*(xR .- xR[gp1]) .+ imag.(a_m1 .- κ).*(xI .- xI[gp1])) ./ abs.(a_m1).^2
         .- 2. .* (real.(a).*(xR[gm1] .- xR)   .+ imag.(a .- κ).*(xI[gm1] .- xI)) ./ abs.(a).^2
         .- real.(a_m1 .+ a) .* (m.*xR .+ (1/6)*λ .* ((xR.^3) .- 3xR.*(xI.^2))) 
         .+ imag.(a_m1 .+ a) .* (m.*xI .+ (1/6)*λ .* (-xI.^3 .+ 3xI.*(xR.^2))) 
         )
+        
+        #A = im * pre_fac * ( 
+        #        (x .- x[gp1]) ./ a_m1 + (x .- x[gm1]) ./ a
+        #        .- (a .+ a_m1)/2 .* (m .* x .+ (λ/6) .* x.^3)
+        #)
 
-        Dre = KRe*ARe .- KIm*AIm
-        Dim = KRe*AIm .+ KIm*ARe
+        #ARe = real(A)
+        #AIm = imag(A)
+
+        
+        
 
         #ξ = randn(t_steps)
-        #dWRe = sqrt(2 * pre_fac)*_sqrtK[1:div(end,2),:] * ξ
-        #dWIm = sqrt(2 * pre_fac)*_sqrtK[div(end,2)+1:end,:] * ξ
+        #dWRe = sqrt(2 * Δt * pre_fac)*_sqrtK[1:div(end,2),:] * ξ
+        #dWIm = sqrt(2 * Δt * pre_fac)*_sqrtK[div(end,2)+1:end,:] * ξ
+
+        Dre = (KRe*ARe .- KIm*AIm)#*Δt .+ dWRe 
+        Dim = (KRe*AIm .+ KIm*ARe)#*Δt .+ dWIm
 
         #return sum(  (max.((Dim .+ dWIm) .* u[div(end,2)+1:end],0.) ./ abs.(u[div(end,2)+1:end]) )  ) / t_steps +
         #       sum(  (max.((Dre .+ dWRe) .* u[1:div(end,2)],0.) ./ abs.(u[1:div(end,2)]) )  ) / (t_steps)
 
-        return sum(  (max.(Dim .* u[div(end,2)+1:end],0.) ./ abs.(u[div(end,2)+1:end]) )  ) / t_steps +
-               sum(  (max.(Dre .* u[1:div(end,2)],0.) ./ abs.(u[1:div(end,2)]) )  ) / (t_steps)
+        #return sum(  (max.(Dim .* u[div(end,2)+1:end],0.) ./ abs.(u[div(end,2)+1:end]) )  ) / t_steps +
+        #       sum(  (max.(Dre .* u[1:div(end,2)],0.) ./ abs.(u[1:div(end,2)]) )  ) / (t_steps)
+
+        #return acos((transpose(Dim)*(-xI)) / (norm(Dim)*norm((-xI)))) + acos((transpose(Dre)*(-xR)) / (norm(Dre)*norm((-xR))))
+        
+        #return acos((transpose(Dim)*(-xI)) / (norm(Dim)*norm((-xI))))^2 + acos((transpose(Dre)*(-xR)) / (norm(Dre)*norm((-xR))))^2
+        #return norm([Dre;Dim])*acos((transpose([Dre;Dim])*(-u)) / (norm([Dre;Dim])*norm((-u))))^4
+
+        D = Dre + im*Dim 
+        #return mean(norm.(D) .* acos.( (Dre .* (-xR) .+ Dim .* (-xI))  ./ (norm.(D) .* norm.(x))).^2)
+        #return mean(abs2, (real(conj.(D) .* (-x)) - norm.(D) .* norm.(x)) ./ (norm.(x)) )
+        return mean(abs, (real(conj.(D) .* (-x)) - norm.(D) .* norm.(x)) )
+        #return mean(abs, (real(adjoint(D) * (-x)) - norm(D) * norm(x)))
+
+        #return max(transpose([Dre;Dim])*u,0.) / norm(u)
+        #return sum(max.([Dre;Dim].*u,0.) / abs.(u)) / t_steps
+
+        #D = Dre .+ im*Dim
+        #dW = dWRe .+ im*dWIm
+        #x = xR + im*xI
+        #x2 = x.^2
+        #Dphi2 = x .* (D .+ dW) .+ sum(KRe .+ im*KIm,dims=2)[:]*Δt
+        #Dphi2 = x .* D .+ sum(KRe .+ im*KIm,dims=2)[:]
+
+        #return mean(norm.(D) .* acos.( (Dre .* (-xR) .+ Dim .* (-xI))  ./ (norm.(D) .* norm.(U))).^2) +
+        #       mean(norm.(Dphi2) .* acos.( (real(Dphi2) .* real(-x2) .+ imag(Dphi2) .* imag(-x2))  ./ (norm.(Dphi2) .* norm.(x2))).^2)
+
+        #return mean(norm.(D) .* acos.( real(conj.(D) .* (-x)) ./ (norm.(D) .* norm.(U))).^2) +
+        #       mean(norm.(Dphi2) .* acos.( real(conj(Dphi2) .* (-x2))  ./ (norm.(Dphi2) .* norm.(x2))).^2)
+
+    
+        #return mean(abs, (real(adjoint(D) * (-x)) - norm(D) * norm(x))) + # ./ (norm.(x)) ) +
+        #       mean(abs, (real(adjoint(Dphi2) * (-x2)) - norm(Dphi2) * norm(x2)))# ./ (norm.(x2)) )
+
+
+
+        #return mean(norm.(Dphi2) .* acos.( (real(Dphi2) .* real(-x2) .+ imag(Dphi2) .* imag(-x2))  ./ (norm.(Dphi2) .* norm.(x2))).^2)
+        #return sum(max.([real(Dphi2);imag(Dphi2)] .* [real(x2);imag(x2)],0.) / abs.([real(x2);imag(x2)])) / t_steps
+
     end
 
     return mean(
             mean(
                g(u) for u in eachrow(tr')
-            ) for tr in sol)[1]^2
+            ) for tr in sol)[1]#^2
 
 end
 

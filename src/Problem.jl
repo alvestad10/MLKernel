@@ -87,7 +87,7 @@ function run_sim(KP::KernelProblem; tspan=20, NTr = 10, saveat=0.01)
         prob
     end
 
-    tspan_init=3
+    tspan_init=1
     prob_init = SDEProblem(a,b,u0,(0.0,tspan_init),K, noise_rate_prototype=noise_rate_prototype)
     ensembleProb_init = EnsembleProblem(prob_init,prob_func=prob_init_func)
     sol_init = solve(#prob_init,
@@ -98,7 +98,7 @@ function run_sim(KP::KernelProblem; tspan=20, NTr = 10, saveat=0.01)
                 #ISSEM(theta=1.0,autodiff=false),
                 EnsembleThreads(); trajectories=NTr, 
                 dt=1e-3, saveat=[tspan_init], #save_start=false,
-                dtmax=1e-3,abstol=1e-3,reltol=1e-3)
+                dtmax=1e-3,abstol=1e-2,reltol=1e-2)
 
     function prob_func(prob,i,repeat)
         prob.u0 .= sol_init[i].u[end]
@@ -110,16 +110,17 @@ function run_sim(KP::KernelProblem; tspan=20, NTr = 10, saveat=0.01)
     ensembleProb = EnsembleProblem(prob,prob_func=prob_func)
     return solve(ensembleProb,
                 #LambaEM(),
-                #SKenCarp(),
+                #SKenCarp(ode_error_est=false),
                 #SOSRA(),
                 #DRI1(),
-                ImplicitEM(theta=0.8,autodiff=true),
-                #ISSEM(theta=0.6,autodiff=true),
+                ImplicitEM(theta=1.0,autodiff=true),
+                #ISSEM(theta=1.0,autodiff=true),
                 EnsembleThreads(); trajectories=NTr, 
                 maxiters=1e10,
-                dt=1e-3, saveat=saveat, save_start=false,
+                #adaptive=false,
+                dt=5e-4, saveat=saveat, save_start=false,
                 #save_noise=true,
-                dtmax=5e-4,abstol=1e-5,reltol=1e-5)
+                dtmax=1e-3,abstol=1e-3,reltol=1e-3)
 end
 
 
