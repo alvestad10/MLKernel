@@ -191,3 +191,25 @@ function plotFWSKContour(KP::KernelProblem{AHO},KP2::KernelProblem{AHO},sol)
     scatter!(fig,x0,corr0tIm[1:maxinx] .± err_corr0tIm[1:maxinx],label=L"$\textrm{Im}\langle x(0)x(t) \rangle$";markers_dict(6)...)
     return fig
 end
+
+
+function plot_x2_Contour(KP::KernelProblem{AHO},sol; plotSol=true, fig=nothing,colors=[1,2])
+    obs = calc_obs(KP,sol)
+    avgRe, err_avgRe, avgIm, err_avgIm, avg2Re, err_avg2Re, avg2Im, err_avg2Im, corr0tRe, err_corr0tRe, corr0tIm, err_corr0tIm = calc_meanObs(KP,obs,length(sol))
+    
+    
+    tp = KP.model.contour.tp[1:end-1]
+
+    if isnothing(fig)
+        fig = plot(xlabel=L"$x_0$",#ylim=[-0.5,0.5]
+                    ;plot_setup(:bottomright)...)
+    end
+
+    if plotSol
+        plot!(fig,tp,real(KP.y["x2"]),label=false;solution_line_dict...)
+        plot!(fig,tp,imag(KP.y["x2"]),label=false;solution_line_dict...)
+    end
+    scatter!(fig,tp,avg2Re .± err_avg2Re,label=L"$\textrm{Re}\langle x^2 \rangle$";markers_dict(colors[1])...)
+    scatter!(fig,tp,avg2Im .± err_avg2Im,label=L"$\textrm{Im}\langle x^2 \rangle$";markers_dict(colors[2])...)
+    return fig
+end

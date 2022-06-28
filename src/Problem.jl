@@ -113,14 +113,14 @@ function run_sim(KP::KernelProblem; tspan=20, NTr = 10, saveat=0.01)
                 #SKenCarp(ode_error_est=false),
                 #SOSRA(),
                 #DRI1(),
-                ImplicitEM(theta=1.0,autodiff=true),
+                ImplicitEM(theta=0.6,autodiff=true),
                 #ISSEM(theta=1.0,autodiff=true),
                 EnsembleThreads(); trajectories=NTr, 
                 maxiters=1e10,
                 #adaptive=false,
                 dt=5e-4, saveat=saveat, save_start=false,
                 #save_noise=true,
-                dtmax=1e-3,abstol=1e-3,reltol=1e-3)
+                dtmax=1e-3,abstol=1e-2,reltol=1e-2)
 end
 
 
